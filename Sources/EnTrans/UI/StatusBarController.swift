@@ -183,18 +183,56 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     private func apply(_ phase: WorkPhase) {
         guard let button = statusItem?.button else { return }
-        let symbol: String
         switch phase {
         case .idle:
-            symbol = "character.book.closed"
+            button.image = MenuBarMark.image
+            button.title = ""
         case .capturing:
-            symbol = "viewfinder"
+            button.image = MenuBarMark.symbol("viewfinder")
+            button.title = "…"
         case .analyzing, .digesting, .followingUp:
-            symbol = "ellipsis.circle"
+            button.image = MenuBarMark.symbol("ellipsis.circle")
+            button.title = "…"
         }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Gloss")
+    }
+}
+
+@MainActor
+private enum MenuBarMark {
+    static let image: NSImage = {
+        let side: CGFloat = 18
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            let font = NSFont(name: "Times-Bold", size: 12.5) ?? NSFont.systemFont(ofSize: 12.5, weight: .bold)
+            let text = NSAttributedString(string: "A", attributes: [
+                .font: font,
+                .foregroundColor: NSColor.black,
+            ])
+            let textSize = text.size()
+            let origin = NSPoint(
+                x: ((rect.width - textSize.width) / 2) - 1.4,
+                y: ((rect.height - textSize.height) / 2) - 0.2
+            )
+            text.draw(at: origin)
+
+            let stroke = NSBezierPath()
+            stroke.lineWidth = 1.15
+            stroke.lineCapStyle = .round
+            let x = origin.x + textSize.width - 0.2
+            let y = origin.y + 1.1
+            stroke.move(to: NSPoint(x: x, y: y + 3.6))
+            stroke.line(to: NSPoint(x: x + 2.7, y: y))
+            NSColor.black.setStroke()
+            stroke.stroke()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Gloss"
+        return image
+    }()
+
+    static func symbol(_ name: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Gloss")
         image?.isTemplate = true
-        button.image = image?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 15, weight: .medium))
-        button.title = phase == .idle ? "" : "…"
+        return image?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 15, weight: .medium))
     }
 }
