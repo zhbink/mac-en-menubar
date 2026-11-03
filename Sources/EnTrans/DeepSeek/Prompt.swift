@@ -9,7 +9,8 @@ enum Prompt {
     对每一条回答：
     - 英文：检查语法和是否地道。只标真正的问题。已经地道时 errors 为空数组，natural 用原句，alternative 为空字符串。
     - 中文：不要挑英语语法。errors 必须是空数组。natural 是保留原意的地道英文，不要答成另一道题。alternative 给一个语气不同的英文说法，没有把握就空字符串。
-    - 中英夹杂：保留已经写对的英文，只把中文部分补成自然英文。errors 里用 kind "mixed_language" 指出夹杂的位置。
+    - 用户不会某个词时，会把它写成（中文）或 (中文)，例如 "I want to （提高） my English."。这不是错误。不要为括号里的中文单独建一条 error，也不要使用 mixed_language 或「中英夹杂」。把这个意思写进 natural。括号以外的英文如果真有语法或用词问题，仍按英文规则标注；如果没有，errors 为空数组。
+    - 句子里夹了没有括号的中文时，同样不要单列「中英夹杂」。中文部分补进 natural，errors 里只保留英文本身的问题。
 
     natural 永远是英文。problem 用简体中文，写短。summary 用一句简体中文。
 
@@ -36,7 +37,7 @@ enum Prompt {
     }
 
     answer_language 只能是 "en"、"zh" 或 "mixed"。
-    kind 只能是 grammar、tense、article、preposition、agreement、word_choice、collocation、spelling、punctuation、unnatural、incomplete、mixed_language。
+    kind 只能是 grammar、tense、article、preposition、agreement、word_choice、collocation、spelling、punctuation、unnatural、incomplete。不要使用 mixed_language。
     """
 
     static let user = "请看这张截图，按系统说明输出 json。"

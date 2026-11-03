@@ -66,6 +66,15 @@ private struct Check {
         let zh = try! ReviewParser.parse(Fixtures.chinese)
         expectEqual(zh.answers[0].answerLanguage, .zh, "zh language")
         expect(zh.answers[0].errors.isEmpty, "zh drops errors")
+
+        let mixed = try! ReviewParser.parse(Fixtures.mixed)
+        expectEqual(mixed.answers[0].answerLanguage, .mixed, "mixed language")
+        expect(mixed.answers[0].errors.isEmpty, "mixed language is not an error")
+        expectEqual(mixed.answers[0].natural, "I usually read at home.", "mixed natural")
+
+        let placeholder = try! ReviewParser.parse(Fixtures.placeholder)
+        expectEqual(placeholder.answers[0].errors.map(\.kind), ["tense"], "placeholder keeps real errors")
+        expectEqual(placeholder.answers[0].natural, "I went to the park yesterday.", "placeholder natural")
         expectEqual(zh.answers[0].natural, "I usually read at home on weekends.", "zh natural")
         expectEqual(zh.answers[0].alternative, "On weekends I mostly stay in and read.", "zh alternative")
 
@@ -81,11 +90,11 @@ private struct Check {
             Fixtures.session(Fixtures.mixed, dayOffset: 0),
         ]
         let errors = SummaryBuilder.errorRows(sessions: sessions, includeMastered: false, kind: nil, query: "")
-        expectEqual(errors.map(\.kind).sorted(), ["article", "mixed_language", "tense"], "error kinds")
+        expectEqual(errors.map(\.kind).sorted(), ["article", "tense"], "error kinds")
         let chineseRows = SummaryBuilder.chineseRows(sessions: sessions, includeMastered: false, query: "")
         expectEqual(chineseRows.map(\.chinese), ["我周末一般在家看书。"], "chinese rows")
         let counts = SummaryBuilder.kindCounts(sessions: sessions, includeMastered: false)
-        expectEqual(counts.map(\.kind).sorted(), ["article", "mixed_language", "tense"], "counts")
+        expectEqual(counts.map(\.kind).sorted(), ["article", "tense"], "counts")
         expect(counts.allSatisfy { $0.count == 1 }, "each count is 1")
 
         var mastered = Fixtures.session(Fixtures.english, dayOffset: 0)
@@ -212,6 +221,21 @@ private enum Fixtures {
         "natural": "I usually read at home."
       }],
       "summary": "夹杂"
+    }
+    """
+
+    static let placeholder = """
+    {
+      "answers": [{
+        "user_answer": "I go to （公园） yesterday.",
+        "answer_language": "mixed",
+        "errors": [
+          {"excerpt": "（公园）", "kind": "word_choice", "problem": "不会表达", "fix": "the park"},
+          {"excerpt": "go", "kind": "tense", "problem": "说昨天要用过去式", "fix": "went"}
+        ],
+        "natural": "I went to the park yesterday."
+      }],
+      "summary": "括号里的词补上，过去式仍要改。"
     }
     """
 

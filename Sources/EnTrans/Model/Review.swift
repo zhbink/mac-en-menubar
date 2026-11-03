@@ -75,6 +75,11 @@ struct ReviewSession: Codable, Equatable, Identifiable {
         imageFilename = try container.decode(String.self, forKey: .imageFilename)
         rawJSON = try container.decode(String.self, forKey: .rawJSON)
         payload = try container.decode(ReviewPayload.self, forKey: .payload)
+        payload.answers = payload.answers.map { answer in
+            var answer = answer
+            answer.errors.removeAll { ErrorKind.shouldDrop($0.kind) || ReviewParser.isParentheticalChinese($0.excerpt) }
+            return answer
+        }
         oversized = try container.decode(Bool.self, forKey: .oversized)
         followUps = try container.decodeIfPresent([FollowUpTurn].self, forKey: .followUps) ?? []
     }
@@ -137,7 +142,7 @@ enum ErrorKind {
     static let all = [
         "grammar", "tense", "article", "preposition", "agreement",
         "word_choice", "collocation", "spelling", "punctuation",
-        "unnatural", "incomplete", "mixed_language", "other",
+        "unnatural", "incomplete", "other",
     ]
 
     static let labels: [String: String] = [
@@ -152,9 +157,13 @@ enum ErrorKind {
         "punctuation": "标点",
         "unnatural": "不地道",
         "incomplete": "不完整",
-        "mixed_language": "中英夹杂",
         "other": "其他",
     ]
+
+    /// Parenthetical Chinese is a word the user could not express. It is not an error category.
+    static func shouldDrop(_ kind: String) -> Bool {
+        kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mixed_language"
+    }
 
     static func normalize(_ raw: String) -> String {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -205,18 +214,23 @@ enum ReviewParser {
     private static func makeAnswer(_ dto: AnswerDTO) -> Answer {
         let userAnswer = dto.userAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
         let language = normalizeLanguage(dto.answerLanguage, userAnswer: userAnswer)
-        var errors = (dto.errors ?? []).map { error in
-            AnswerError(
-                id: UUID(),
-                excerpt: error.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-                kind: ErrorKind.normalize(error.kind ?? ""),
-                problem: error.problem?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-                fix: error.fix?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-                mastered: false
-            )
-        }
-        if language == .zh {
-            errors = []
+        var errors: [AnswerError] = []
+        if language != .zh {
+            errors = (dto.errors ?? []).compactMap { error in
+                let excerpt = error.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let rawKind = error.kind ?? ""
+                if ErrorKind.shouldDrop(rawKind) || isParentheticalChinese(excerpt) {
+                    return nil
+                }
+                return AnswerError(
+                    id: UUID(),
+                    excerpt: excerpt,
+                    kind: ErrorKind.normalize(rawKind),
+                    problem: error.problem?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    fix: error.fix?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    mastered: false
+                )
+            }
         }
         return Answer(
             id: UUID(),
@@ -241,6 +255,23 @@ enum ReviewParser {
         default:
             return inferLanguage(userAnswer)
         }
+    }
+
+    static func isParentheticalChinese(_ excerpt: String) -> Bool {
+        let trimmed = excerpt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inner: String
+        if (trimmed.hasPrefix("（") && trimmed.hasSuffix("）")) || (trimmed.hasPrefix("(") && trimmed.hasSuffix(")")) {
+            inner = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            return false
+        }
+        guard !inner.isEmpty else { return false }
+        let hasCJK = inner.unicodeScalars.contains { (0x3400...0x9FFF).contains(Int($0.value)) }
+        let hasLatin = inner.unicodeScalars.contains {
+            let value = Int($0.value)
+            return (65...90).contains(value) || (97...122).contains(value)
+        }
+        return hasCJK && !hasLatin
     }
 
     static func inferLanguage(_ text: String) -> AnswerLanguage {
